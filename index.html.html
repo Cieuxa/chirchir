@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analyseur d'Équilibre de Pendule</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #fff;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+
+        .control-panel {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        #startBtn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 20px 50px;
+            font-size: 1.3em;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        #startBtn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+
+        #startBtn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            margin-top: 15px;
+            font-size: 1.1em;
+            min-height: 30px;
+        }
+
+        .debug-info {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+
+        .debug-line {
+            margin: 5px 0;
+        }
+
+        .sensitivity-control {
+            margin: 20px 0;
+        }
+
+        .sensitivity-control label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .sensitivity-control input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.3);
+            outline: none;
+        }
+
+        .sensitivity-value {
+            text-align: center;
+            font-size: 1.2em;
+            margin-top: 10px;
+        }
+
+        .balance-display {
+            margin: 30px 0;
+        }
+
+        .balance-gauge {
+            position: relative;
+            height: 60px;
+            background: linear-gradient(90deg, 
+                #ef4444 0%, 
+                #f59e0b 25%, 
+                #10b981 45%, 
+                #10b981 55%, 
+                #f59e0b 75%, 
+                #ef4444 100%);
+            border-radius: 30px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+
+        .gauge-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+
+        .needle {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            width: 4px;
+            height: 100%;
+            background: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            transition: left 0.3s ease;
+            transform: translateX(-50%);
+        }
+
+        .needle::before {
+            content: '▼';
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 20px;
+        }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .metric {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 15px;
+            text-align: center;
+        }
+
+        .metric-label {
+            font-size: 0.85em;
+            opacity: 0.8;
+            margin-bottom: 5px;
+        }
+
+        .metric-value {
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+
+        .waveform {
+            width: 100%;
+            height: 150px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        .history {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+
+        .history-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 8px;
+            font-size: 0.9em;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .listening {
+            animation: pulse 1.5s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⏰ Analyseur de Pendule</h1>
+            <p class="subtitle">Version corrigée - Détection améliorée</p>
+        </header>
+
+        <div class="card">
+            <h2>🎤 Sélection du Microphone</h2>
+            <div class="sensitivity-control">
+                <label for="micSelect">Choisissez votre microphone :</label>
+                <select id="micSelect" style="width: 100%; padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.3); font-size: 1em; margin-top: 10px;">
+                    <option value="">Chargement des micros...</option>
+                </select>
+                <div style="margin-top: 10px; font-size: 0.9em; opacity: 0.8;">
+                    Micro actif : <span id="activeMic">Aucun</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card control-panel">
+            <button id="startBtn">🎤 Démarrer l'Analyse</button>
+            <div class="status" id="status">Prêt à analyser votre pendule</div>
+        </div>
+
+        <div class="card">
+            <h2>🔧 Sensibilité de Détection</h2>
+            <div class="sensitivity-control">
+                <label for="threshold">Ajustez si rien ne se détecte (plus bas = plus sensible)</label>
+                <input type="range" id="threshold" min="2" max="150" value="40" step="2">
+                <div class="sensitivity-value">Seuil: <span id="thresholdValue">40</span></div>
+            </div>
+            <div class="sensitivity-control">
+                <label>
+                    <input type="checkbox" id="ultraSensitive"> Mode Ultra-Sensible (pour pendules discrètes)
+                </label>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>🐛 Informations de Debug</h2>
+            <div class="debug-info">
+                <div class="debug-line">Pics détectés: <span id="peakCount">0</span></div>
+                <div class="debug-line">Volume actuel: <span id="currentVolume">0</span></div>
+                <div class="debug-line">Dernier pic: <span id="lastPeak">jamais</span></div>
+                <div class="debug-line">Intervalles collectés: <span id="intervalCount">0</span></div>
+                <div class="debug-line">État: <span id="detectionState">En attente</span></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Équilibre du Balancier</h2>
+            <div class="balance-display">
+                <div class="balance-gauge">
+                    <div class="needle" id="needle"></div>
+                </div>
+                <div class="gauge-labels">
+                    <span>← GAUCHE</span>
+                    <span>ÉQUILIBRE</span>
+                    <span>DROITE →</span>
+                </div>
+            </div>
+
+            <div class="metrics">
+                <div class="metric">
+                    <div class="metric-label">Déséquilibre</div>
+                    <div class="metric-value" id="imbalance">--</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Intervalle Tic</div>
+                    <div class="metric-value" id="ticTime">--</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Intervalle Tac</div>
+                    <div class="metric-value" id="tacTime">--</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Pics détectés</div>
+                    <div class="metric-value" id="peakCountMetric">0</div>
+                </div>
+            </div>
+
+            <canvas id="waveform" class="waveform"></canvas>
+        </div>
+
+        <div class="card">
+            <h3>📊 Historique des mesures</h3>
+            <div class="history" id="history">
+                <p style="opacity: 0.6;">Les mesures apparaîtront ici...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let audioContext;
+        let analyser;
+        let microphone;
+        let dataArray;
+        let isListening = false;
+        let lastPeakTime = 0;
+        let intervals = [];
+        let canvas, canvasContext;
+        let threshold = 40;
+        let peakCount = 0;
+        let lastVolume = 0;
+        let ultraSensitive = false;
+        let volumeHistory = [];
+        let adaptiveThreshold = 40;
+
+        const startBtn = document.getElementById('startBtn');
+        const status = document.getElementById('status');
+        const needle = document.getElementById('needle');
+        const imbalanceDisplay = document.getElementById('imbalance');
+        const ticTimeDisplay = document.getElementById('ticTime');
+        const tacTimeDisplay = document.getElementById('tacTime');
+        const historyDiv = document.getElementById('history');
+        const thresholdSlider = document.getElementById('threshold');
+        const thresholdValue = document.getElementById('thresholdValue');
+        const ultraSensitiveCheckbox = document.getElementById('ultraSensitive');
+        const micSelect = document.getElementById('micSelect');
+        const activeMicDisplay = document.getElementById('activeMic');
+        
+        let availableMics = [];
+        let selectedMicId = null;
+        
+        // Debug elements
+        const peakCountDebug = document.getElementById('peakCount');
+        const currentVolumeDebug = document.getElementById('currentVolume');
+        const lastPeakDebug = document.getElementById('lastPeak');
+        const intervalCountDebug = document.getElementById('intervalCount');
+        const detectionStateDebug = document.getElementById('detectionState');
+        const peakCountMetric = document.getElementById('peakCountMetric');
+
+        thresholdSlider.addEventListener('input', (e) => {
+            threshold = parseInt(e.target.value);
+            thresholdValue.textContent = threshold;
+        });
+
+        ultraSensitiveCheckbox.addEventListener('change', (e) => {
+            ultraSensitive = e.target.checked;
+            if (ultraSensitive) {
+                threshold = 15;
+                thresholdSlider.value = 15;
+                thresholdValue.textContent = 15;
+                detectionStateDebug.textContent = 'Mode Ultra-Sensible activé';
+            } else {
+                threshold = 40;
+                thresholdSlider.value = 40;
+                thresholdValue.textContent = 40;
+            }
+        });
+
+        // Load available microphones
+        async function loadMicrophones() {
+            try {
+                // Request permission first
+                await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                // Enumerate devices
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                availableMics = devices.filter(device => device.kind === 'audioinput');
+                
+                // Populate dropdown
+                micSelect.innerHTML = '';
+                availableMics.forEach((device, index) => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId;
+                    option.textContent = device.label || `Microphone ${index + 1}`;
+                    micSelect.appendChild(option);
+                });
+                
+                if (availableMics.length > 0) {
+                    selectedMicId = availableMics[0].deviceId;
+                    activeMicDisplay.textContent = availableMics[0].label || 'Microphone par défaut';
+                }
+            } catch (error) {
+                console.error('Error loading microphones:', error);
+                micSelect.innerHTML = '<option>Erreur de chargement</option>';
+            }
+        }
+
+        micSelect.addEventListener('change', (e) => {
+            selectedMicId = e.target.value;
+            const selectedMic = availableMics.find(m => m.deviceId === selectedMicId);
+            if (selectedMic) {
+                activeMicDisplay.textContent = selectedMic.label || 'Microphone sélectionné';
+            }
+            
+            // Restart listening with new microphone if currently active
+            if (isListening) {
+                stopListening();
+                setTimeout(() => startListening(), 100);
+            }
+        });
+
+        // Load microphones on page load
+        loadMicrophones();
+
+        startBtn.addEventListener('click', toggleListening);
+
+        async function toggleListening() {
+            if (!isListening) {
+                await startListening();
+            } else {
+                stopListening();
+            }
+        }
+
+        async function startListening() {
+            try {
+                const constraints = {
+                    audio: {
+                        deviceId: selectedMicId ? { exact: selectedMicId } : undefined,
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    }
+                };
+                
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                microphone = audioContext.createMediaStreamSource(stream);
+                
+                analyser.fftSize = 2048;
+                analyser.smoothingTimeConstant = 0.1; // Less smoothing for better peak detection
+                const bufferLength = analyser.frequencyBinCount;
+                dataArray = new Uint8Array(bufferLength);
+                
+                microphone.connect(analyser);
+                
+                isListening = true;
+                startBtn.textContent = '⏹️ Arrêter l\'Analyse';
+                startBtn.classList.add('listening');
+                status.textContent = '🎧 Écoute en cours...';
+                detectionStateDebug.textContent = 'Actif - En attente de pics';
+                
+                canvas = document.getElementById('waveform');
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+                canvasContext = canvas.getContext('2d');
+                
+                // Reset counters
+                peakCount = 0;
+                intervals = [];
+                lastPeakTime = 0;
+                
+                analyze();
+                
+            } catch (error) {
+                status.textContent = '❌ Erreur: Vérifiez les permissions micro';
+                detectionStateDebug.textContent = 'Erreur d\'accès micro';
+                console.error('Error accessing microphone:', error);
+            }
+        }
+
+        function stopListening() {
+            if (microphone) {
+                microphone.disconnect();
+                microphone = null;
+            }
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            
+            isListening = false;
+            startBtn.textContent = '🎤 Démarrer l\'Analyse';
+            startBtn.classList.remove('listening');
+            status.textContent = 'Analyse arrêtée';
+            detectionStateDebug.textContent = 'Arrêté';
+            intervals = [];
+        }
+
+        function analyze() {
+            if (!isListening) return;
+            
+            analyser.getByteTimeDomainData(dataArray);
+            
+            // Draw waveform
+            drawWaveform();
+            
+            // Calculate RMS volume with automatic gain
+            let sumSquares = 0;
+            let maxAmplitude = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+                const normalized = (dataArray[i] - 128) / 128;
+                sumSquares += normalized * normalized;
+                maxAmplitude = Math.max(maxAmplitude, Math.abs(normalized));
+            }
+            const rms = Math.sqrt(sumSquares / dataArray.length);
+            let volume = Math.floor(rms * 1000);
+            
+            // Auto-gain in ultra-sensitive mode
+            if (ultraSensitive) {
+                volume = Math.floor(volume * 3); // 3x amplification
+                
+                // Track volume history for adaptive threshold
+                volumeHistory.push(volume);
+                if (volumeHistory.length > 100) {
+                    volumeHistory.shift();
+                }
+                
+                // Calculate adaptive threshold (75% of average volume)
+                if (volumeHistory.length > 20) {
+                    const avgVolume = volumeHistory.reduce((a, b) => a + b, 0) / volumeHistory.length;
+                    adaptiveThreshold = Math.max(threshold, avgVolume * 0.75);
+                }
+            }
+            
+            const effectiveThreshold = ultraSensitive ? adaptiveThreshold : threshold;
+            
+            // Update debug display
+            currentVolumeDebug.textContent = volume + (ultraSensitive ? ' (x3)' : '');
+            
+            // Detect peaks using volume increase with lower requirements
+            const volumeIncrease = volume - lastVolume;
+            const now = performance.now();
+            
+            const minIncrease = ultraSensitive ? 5 : 20; // Much lower spike threshold in ultra mode
+            const minTimeBetweenPeaks = ultraSensitive ? 100 : 150; // Faster detection
+            
+            if (volume > effectiveThreshold && volumeIncrease > minIncrease) {
+                const timeSinceLastPeak = now - lastPeakTime;
+                
+                if (timeSinceLastPeak > minTimeBetweenPeaks) {
+                    peakCount++;
+                    peakCountDebug.textContent = peakCount;
+                    peakCountMetric.textContent = peakCount;
+                    lastPeakDebug.textContent = new Date().toLocaleTimeString('fr-FR') + '.' + (now % 1000).toFixed(0);
+                    
+                    if (lastPeakTime > 0 && timeSinceLastPeak < 3000) {
+                        intervals.push(timeSinceLastPeak);
+                        intervalCountDebug.textContent = intervals.length;
+                        detectionStateDebug.textContent = `Collecte (${intervals.length} intervalles)`;
+                        
+                        // Keep only last 20 intervals
+                        if (intervals.length > 20) {
+                            intervals.shift();
+                        }
+                        
+                        // Need at least 4 intervals to analyze (2 tic-tac cycles)
+                        if (intervals.length >= 4) {
+                            calculateBalance();
+                        }
+                    }
+                    
+                    lastPeakTime = now;
+                }
+            }
+            
+            lastVolume = volume;
+            
+            requestAnimationFrame(analyze);
+        }
+
+        function drawWaveform() {
+            canvasContext.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            canvasContext.fillRect(0, 0, canvas.width, canvas.height);
+            
+            canvasContext.lineWidth = 2;
+            canvasContext.strokeStyle = '#60a5fa';
+            canvasContext.beginPath();
+            
+            const sliceWidth = canvas.width / dataArray.length;
+            let x = 0;
+            
+            for (let i = 0; i < dataArray.length; i++) {
+                const v = dataArray[i] / 128.0;
+                const y = v * canvas.height / 2;
+                
+                if (i === 0) {
+                    canvasContext.moveTo(x, y);
+                } else {
+                    canvasContext.lineTo(x, y);
+                }
+                
+                x += sliceWidth;
+            }
+            
+            canvasContext.stroke();
+            
+            // Draw threshold line
+            const thresholdY = canvas.height / 2;
+            canvasContext.strokeStyle = 'rgba(239, 68, 68, 0.5)';
+            canvasContext.lineWidth = 1;
+            canvasContext.beginPath();
+            canvasContext.moveTo(0, thresholdY);
+            canvasContext.lineTo(canvas.width, thresholdY);
+            canvasContext.stroke();
+        }
+
+        function calculateBalance() {
+            // Separate odd and even intervals (tic vs tac)
+            const ticIntervals = intervals.filter((_, i) => i % 2 === 0);
+            const tacIntervals = intervals.filter((_, i) => i % 2 === 1);
+            
+            if (ticIntervals.length < 2 || tacIntervals.length < 2) {
+                detectionStateDebug.textContent = 'Besoin de plus d\'intervalles';
+                return;
+            }
+            
+            const avgTic = ticIntervals.reduce((a, b) => a + b, 0) / ticIntervals.length;
+            const avgTac = tacIntervals.reduce((a, b) => a + b, 0) / tacIntervals.length;
+            
+            // Calculate imbalance percentage
+            const totalTime = avgTic + avgTac;
+            const imbalance = ((avgTac - avgTic) / totalTime) * 100;
+            
+            detectionStateDebug.textContent = 'Analyse en cours';
+            
+            // Update displays
+            updateDisplay(imbalance, avgTic, avgTac);
+        }
+
+        function updateDisplay(imbalance, avgTic, avgTac) {
+            // Update needle position
+            const needlePos = 50 + (imbalance * 1.5);
+            const clampedPos = Math.max(0, Math.min(100, needlePos));
+            needle.style.left = clampedPos + '%';
+            
+            // Update metrics
+            imbalanceDisplay.textContent = imbalance.toFixed(1) + '%';
+            ticTimeDisplay.textContent = avgTic.toFixed(0) + 'ms';
+            tacTimeDisplay.textContent = avgTac.toFixed(0) + 'ms';
+            
+            // Update status
+            const absImbalance = Math.abs(imbalance);
+            if (absImbalance < 5) {
+                status.textContent = '✅ Excellent équilibre !';
+                status.style.color = '#10b981';
+            } else if (absImbalance < 15) {
+                const direction = imbalance > 0 ? 'GAUCHE' : 'DROITE';
+                status.textContent = `⚠️ Ajustement recommandé → Pencher vers la ${direction}`;
+                status.style.color = '#f59e0b';
+            } else {
+                const direction = imbalance > 0 ? 'GAUCHE' : 'DROITE';
+                status.textContent = `❌ Déséquilibre important → Pencher nettement vers la ${direction}`;
+                status.style.color = '#ef4444';
+            }
+            
+            // Add to history
+            addToHistory(imbalance, avgTic, avgTac);
+        }
+
+        function addToHistory(imbalance, tic, tac) {
+            const time = new Date().toLocaleTimeString('fr-FR');
+            const historyItem = document.createElement('div');
+            historyItem.className = 'history-item';
+            
+            const absImbalance = Math.abs(imbalance);
+            const emoji = absImbalance < 5 ? '✅' : absImbalance < 15 ? '⚠️' : '❌';
+            
+            historyItem.innerHTML = `
+                ${emoji} <strong>${time}</strong> - 
+                Déséquilibre: ${imbalance.toFixed(1)}% | 
+                Tic: ${tic.toFixed(0)}ms | 
+                Tac: ${tac.toFixed(0)}ms
+            `;
+            
+            if (historyDiv.firstChild && historyDiv.firstChild.tagName === 'P') {
+                historyDiv.innerHTML = '';
+            }
+            
+            historyDiv.insertBefore(historyItem, historyDiv.firstChild);
+            
+            // Keep only last 10 items
+            while (historyDiv.children.length > 10) {
+                historyDiv.removeChild(historyDiv.lastChild);
+            }
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (isListening) {
+                stopListening();
+            }
+        });
+    </script>
+</body>
+</html>
